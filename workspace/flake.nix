@@ -17,11 +17,10 @@
       nixpkgs-pr-angr,
       pwndbg,
     }:
-    {
-      packages = {
-        x86_64-linux =
+    let
+      mkPackages =
+        system:
           let
-            system = "x86_64-linux";
             config = {
               allowUnfree = true;
             };
@@ -138,6 +137,11 @@
             cli = buildDojoEnv "cli" [ dojo-cli ];
             full = buildDojoEnv "full" fullPackages;
           };
+    in
+    {
+      packages = {
+        x86_64-linux = mkPackages "x86_64-linux";
+        aarch64-linux = mkPackages "x86_64-linux";
       };
     };
 }

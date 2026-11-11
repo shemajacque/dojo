@@ -50,6 +50,20 @@ HOST_HOMES = pathlib.Path(HOST_DATA_PATH) / "workspace" / "homes"
 HOST_HOMES_MOUNTS = HOST_HOMES / "mounts"
 HOST_HOMES_OVERLAYS = HOST_HOMES / "overlays"
 WORKSPACE_OUTPUT_LIMIT = 16 * 1024
+KATA_RUNTIME = "io.containerd.run.kata.v2"
+
+
+def kata_available(docker_client):
+    key = f"kata-{docker_client.api.base_url}"
+    if (cached := cache.get(key)) is not None:
+        return cached
+    try:
+        available = KATA_RUNTIME in (docker_client.info().get("Runtimes") or {})
+    except Exception:
+        available = False
+    timeout = int(datetime.timedelta(days=1).total_seconds())
+    cache.set(key, available, timeout=timeout)
+    return available
 
 
 class WorkspaceInitializationError(RuntimeError):
@@ -199,7 +213,7 @@ def start_container(docker_client, user, as_user, user_mounts, dojo_challenge, p
         cpu_quota=400000,
         pids_limit=1024,
         mem_limit="4G",
-        runtime="io.containerd.run.kata.v2" if resolved_dojo_challenge.privileged else "runc",
+        runtime=KATA_RUNTIME if resolved_dojo_challenge.privileged and kata_available(docker_client) else "runc",
         cap_add=capabilities,
         security_opt=[f"seccomp={SECCOMP}"],
         sysctls={"net.ipv4.ip_unprivileged_port_start": 1024},

@@ -26,7 +26,7 @@ def handle_image_pull_event(event):
                 return False, True
         logger.info(f"Pulling image {image} for {dojo_reference_id or 'unknown dojo'} on {client.api.base_url}...")
         try:
-            client.images.pull(image)
+            client.images.pull(image, platform="linux/amd64")
         except docker.errors.ImageNotFound:
             logger.error(f"... image not found: {image} on {client.api.base_url}...")
             return False, False

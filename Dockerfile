@@ -2,20 +2,30 @@
 
 FROM ubuntu:24.04 AS kata-builder
 
+ARG TARGETARCH=amd64
 ENV KATA_VERSION=4.1.0
 
 SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN <<EOF
+if [ "$TARGETARCH" != "arm64" ]; then
+  apt-get update
+  apt-get install -y --no-install-recommends \
       build-essential bc flex bison libssl-dev libelf-dev dwarves \
-      curl ca-certificates yq \
-    && rm -rf /var/lib/apt/lists/*
-
-ADD https://github.com/kata-containers/kata-containers.git#${KATA_VERSION} /src/kata-containers
+      curl ca-certificates yq git
+  rm -rf /var/lib/apt/lists/*
+  git clone --depth 1 --branch "$KATA_VERSION" https://github.com/kata-containers/kata-containers.git /src/kata-containers
+fi
+mkdir -p /usr/share/kata-containers
+touch /usr/share/kata-containers/vmlinux.container
+EOF
 
 WORKDIR /src/kata-containers/tools/packaging/kernel
 
-COPY <<EOF configs/fragments/x86_64/dojo.conf
+RUN <<EOF
+if [ "$TARGETARCH" != "arm64" ]; then
+  mkdir -p configs/fragments/x86_64
+  cat > configs/fragments/x86_64/dojo.conf <<'CONF'
 CONFIG_SECURITY_LANDLOCK=y
 
 CONFIG_BPF_JIT=y
@@ -30,16 +40,17 @@ CONFIG_KPROBE_EVENTS=y
 CONFIG_KPROBES=y
 CONFIG_PERF_EVENTS=y
 CONFIG_PROFILING=y
-EOF
-
-RUN <<EOF
+CONF
   KERNEL_VERSION=$(yq -r '.assets.kernel.version' ../../../versions.yaml)
   ./build-kernel.sh -v "$KERNEL_VERSION" setup
   ./build-kernel.sh -v "$KERNEL_VERSION" build
   ./build-kernel.sh -v "$KERNEL_VERSION" install
+fi
 EOF
 
 FROM ubuntu:24.04 AS dojo
+
+ARG TARGETARCH=amd64
 
 SHELL ["/bin/bash", "-ceox", "pipefail"]
 
@@ -78,16 +89,22 @@ RUN cp /tmp/daemon.json /etc/docker/daemon.json
 ADD https://raw.githubusercontent.com/moby/profiles/master/seccomp/default.json /etc/docker/seccomp.json
 
 RUN <<EOF
-KATA_VERSION=4.1.0
-curl -fL https://github.com/kata-containers/kata-containers/releases/download/${KATA_VERSION}/kata-static-${KATA_VERSION}-amd64.tar.zst | tar --zstd -x --strip-components=2 -C /opt
-ln -s /opt/kata/runtime-rs/bin/containerd-shim-kata-v2 /usr/local/bin/containerd-shim-kata-v2
+if [ "$TARGETARCH" != "arm64" ]; then
+  KATA_VERSION=4.1.0
+  curl -fL https://github.com/kata-containers/kata-containers/releases/download/${KATA_VERSION}/kata-static-${KATA_VERSION}-amd64.tar.zst | tar --zstd -x --strip-components=2 -C /opt
+  ln -s /opt/kata/runtime-rs/bin/containerd-shim-kata-v2 /usr/local/bin/containerd-shim-kata-v2
+fi
 EOF
 
 COPY --from=kata-builder /usr/share/kata-containers/vmlinux.container /opt/kata/share/kata-containers/vmlinux.container
 
 RUN <<EOF
+case "$TARGETARCH" in
+  arm64) AWS_ARCH=aarch64 ;;
+  *) AWS_ARCH=x86_64 ;;
+esac
 cd /tmp
-wget -O aws.zip "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"
+wget -O aws.zip "https://awscli.amazonaws.com/awscli-exe-linux-${AWS_ARCH}.zip"
 unzip aws.zip
 ./aws/install
 rm -rf aws.zip aws

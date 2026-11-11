@@ -20,7 +20,7 @@ for image, in DojoChallenges.query.with_entities(db.distinct(DojoChallenges.data
             client.login(DOCKER_USERNAME, DOCKER_TOKEN)
         logger.info(f"Pulling image {image} on {client.api.base_url}...")
         try:
-            client.images.pull(image)
+            client.images.pull(image, platform="linux/amd64")
         except docker.errors.ImageNotFound:
             logger.error(f"... image not found: {image} on {client.api.base_url}...")
         except Exception as e:

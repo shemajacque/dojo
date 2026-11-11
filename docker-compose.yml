@@ -1,6 +1,5 @@
 x-site-base: &site-base
   build: ./site
-  platform: linux/amd64
   user: root
   entrypoint: ""
 

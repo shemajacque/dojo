@@ -6,6 +6,7 @@ RUN cat >> /etc/nix/nix.conf <<EOF
 experimental-features = nix-command flakes
 accept-flake-config = true
 substituters = https://cache.nixos.org/
+extra-platforms = x86_64-linux
 EOF
 
 COPY --chmod=755 <<'EOF' /docker-entrypoint.sh
